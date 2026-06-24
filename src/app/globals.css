@@ -1,0 +1,222 @@
+/* FitAI Coach Design System & Global Styles */
+
+:root {
+  /* Palette */
+  --background: #0E0F11;
+  --surface: #16181C;
+  --border: #252830;
+  --border-hover: #3A3F4A;
+  --primary: #C8F05A; /* Electric Lime */
+  --secondary: #5A8AF0; /* Cool Blue */
+  --text-primary: #F2F3F5;
+  --text-muted: #6B7280;
+
+  /* Font mapping */
+  --font-display: var(--font-space-grotesk), sans-serif;
+  --font-body: var(--font-inter), sans-serif;
+  --font-data: var(--font-jetbrains-mono), monospace;
+
+  /* Transitions */
+  --transition-speed: 200ms;
+  --transition-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Reset & Base styles */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  outline-color: var(--primary);
+}
+
+html, body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+p, span, label, input, select, textarea {
+  font-family: var(--font-body);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Buttons Design System */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--primary);
+  color: #0E0F11;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  border: none;
+  border-radius: 9999px;
+  padding: 14px 28px;
+  cursor: pointer;
+  transform: scale(1);
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1), 
+              box-shadow 150ms ease-out, 
+              background-color 150ms ease-out;
+  box-shadow: 0 0 0px rgba(200, 240, 90, 0);
+  text-transform: uppercase;
+}
+
+.btn-primary:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 16px rgba(200, 240, 90, 0.35);
+  background-color: #d4f76b;
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: var(--primary);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--primary);
+  border-radius: 9999px;
+  padding: 13px 27px;
+  cursor: pointer;
+  transition: background-color var(--transition-speed) var(--transition-ease),
+              color var(--transition-speed) var(--transition-ease),
+              transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  text-transform: uppercase;
+}
+
+.btn-secondary:hover {
+  background-color: var(--primary);
+  color: #0E0F11;
+  transform: scale(1.03);
+}
+
+.btn-secondary:active {
+  transform: scale(0.97);
+}
+
+/* Card Styling */
+.card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px; /* Generous breathing room */
+  transition: transform var(--transition-speed) var(--transition-ease),
+              border-color var(--transition-speed) var(--transition-ease);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+}
+
+/* Data styling */
+.data-mono {
+  font-family: var(--font-data);
+}
+
+/* Divider */
+.divider {
+  height: 1px;
+  background-color: var(--border);
+  width: 100%;
+  margin: 24px 0;
+}
+
+/* Page Slide & Fade Transition Container */
+.page-transition {
+  animation: pageIn 250ms ease-out forwards;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Skeleton Screens */
+.skeleton {
+  background: linear-gradient(90deg, #16181C 25%, #252830 50%, #16181C 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Prefers Reduced Motion overrides */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  .btn-primary:hover, .btn-secondary:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .btn-primary:active, .btn-secondary:active {
+    transform: none !important;
+  }
+  .card:hover {
+    transform: none !important;
+  }
+  .page-transition {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
