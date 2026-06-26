@@ -209,7 +209,7 @@ interface BackendWeeklyCheckin {
 interface BackendWorkoutDay {
   day: number;
   name: string;
-  exercises: { name: string; sets: number; reps: string }[];
+  exercises: { name: string; sets: number; reps: string; target_weight_kg?: number }[];
 }
 
 interface BackendWorkoutPlanResponse {
@@ -633,12 +633,28 @@ export const api = {
 
     const b = res.data as BackendWorkoutPlanResponse;
     const currentDay = b.days[0] || { name: "Rest", exercises: [] };
-    const mappedExercises = currentDay.exercises.map((ex, idx) => ({
-      id: `ex_${idx}`,
-      name: ex.name,
-      sets: Array.from({ length: ex.sets }).map(() => ({ reps: 10, weightKg: 50, completed: false })),
-      restSeconds: 90,
-    }));
+    const mappedExercises = currentDay.exercises.map((ex, idx) => {
+      let repsNum = 10;
+      if (ex.reps) {
+        const parts = ex.reps.split("-");
+        if (parts.length === 2) {
+          repsNum = Math.round((parseInt(parts[0]) + parseInt(parts[1])) / 2);
+        } else {
+          const parsed = parseInt(ex.reps);
+          if (!isNaN(parsed)) repsNum = parsed;
+        }
+      }
+      return {
+        id: `ex_${idx}`,
+        name: ex.name,
+        sets: Array.from({ length: ex.sets }).map(() => ({ 
+          reps: repsNum, 
+          weightKg: ex.target_weight_kg || 50, 
+          completed: false 
+        })),
+        restSeconds: 90,
+      };
+    });
 
     const mappedData: WorkoutPlan = {
       splitName: b.split.replace("_", " ").toUpperCase(),
