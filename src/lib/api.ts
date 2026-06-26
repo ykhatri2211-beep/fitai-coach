@@ -170,6 +170,7 @@ interface BackendDashboardResponse {
   confidence: BackendConfidence | null;
   compliance_score: number;
   common_foods: any[];
+  calories_burned: number;
 }
 
 interface BackendFoodEntry {
@@ -424,7 +425,7 @@ export const api = {
       calories: {
         consumed: b.consumed.calories,
         goal: b.targets.calories,
-        burned: 0,
+        burned: b.calories_burned || 0,
       },
       macros: {
         protein: { current: b.consumed.protein_g, goal: b.targets.protein_g },
@@ -766,5 +767,28 @@ export const api = {
     };
 
     return { data: converted, isMock: false };
+  },
+
+  async logActivity(
+    token: string,
+    payload: { activity_type: string; duration_minutes: number; intensity: string }
+  ): Promise<{ data: { id: string; calories_burned: number }; isMock: boolean }> {
+    const mockData = {
+      id: Math.random().toString(36).substring(7),
+      calories_burned: Math.round(
+        payload.duration_minutes * 
+        (payload.intensity === "high" ? 10 : payload.intensity === "moderate" ? 7 : 4.5)
+      ),
+    };
+
+    return request<{ id: string; calories_burned: number }>(
+      "/workouts/activity",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token,
+      mockData
+    );
   },
 };

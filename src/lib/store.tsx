@@ -50,6 +50,7 @@ interface StoreContextType {
   logMealPhoto: (base64: string) => Promise<void>;
   logWater: (ml: number) => void;
   uploadScan: (base64: string) => Promise<void>;
+  logActivity: (activityType: string, durationMinutes: number, intensity: string) => Promise<number>;
   startWorkout: () => void;
   toggleExerciseSet: (exerciseId: string, setIndex: number) => void;
   updateGoal: (goal: string) => void;
@@ -313,6 +314,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const logActivity = async (activityType: string, durationMinutes: number, intensity: string): Promise<number> => {
+    if (!token) return 0;
+    const res = await api.logActivity(token, {
+      activity_type: activityType,
+      duration_minutes: durationMinutes,
+      intensity: intensity,
+    });
+
+    if (dashboardData) {
+      setDashboardData({
+        ...dashboardData,
+        calories: {
+          ...dashboardData.calories,
+          burned: (dashboardData.calories.burned || 0) + res.data.calories_burned,
+        },
+      });
+    }
+    return res.data.calories_burned;
+  };
+
   const logWater = (ml: number) => {
     const updatedMl = Math.max(0, hydrationMl + ml);
     saveHydration(updatedMl);
@@ -451,6 +472,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         logMealPhoto,
         logWater,
         uploadScan,
+        logActivity,
         startWorkout,
         toggleExerciseSet,
         updateGoal,

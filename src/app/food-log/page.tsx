@@ -4,11 +4,19 @@ import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 
 export default function FoodLogPage() {
-  const { foodLog, logMealText, logMealPhoto } = useStore();
+  const { foodLog, logMealText, logMealPhoto, logActivity } = useStore();
   const [textInput, setTextInput] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+
+  // Exercise state
+  const [exerciseType, setExerciseType] = useState("");
+  const [duration, setDuration] = useState<number | "">("");
+  const [intensity, setIntensity] = useState("moderate");
+  const [isLoggingExercise, setIsLoggingExercise] = useState(false);
+  const [burnedCaloriesFeedback, setBurnedCaloriesFeedback] = useState<number | null>(null);
+  const [loggedExerciseName, setLoggedExerciseName] = useState("");
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,6 +24,33 @@ export default function FoodLogPage() {
     
     await logMealText(textInput);
     setTextInput("");
+  };
+
+  const handleExerciseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!exerciseType.trim() || !duration || duration <= 0) return;
+
+    setIsLoggingExercise(true);
+    setBurnedCaloriesFeedback(null);
+    try {
+      const burned = await logActivity(exerciseType, Number(duration), intensity);
+      setBurnedCaloriesFeedback(burned);
+      setLoggedExerciseName(exerciseType);
+      
+      // Reset form
+      setExerciseType("");
+      setDuration("");
+      setIntensity("moderate");
+
+      // Auto-hide success message after 8 seconds
+      setTimeout(() => {
+        setBurnedCaloriesFeedback(null);
+      }, 8000);
+    } catch (err) {
+      console.error("Exercise log failed:", err);
+    } finally {
+      setIsLoggingExercise(false);
+    }
   };
 
   const simulatePhotoScan = async (file: File) => {
@@ -158,6 +193,81 @@ export default function FoodLogPage() {
               />
               <button type="submit" className="btn-primary log-meal-btn">
                 LOG YOUR MEAL
+              </button>
+            </form>
+          </section>
+
+          {/* Exercise Logger Card */}
+          <section className="card exercise-log-card">
+            <h2 className="section-title">EXERCISE LOGGER</h2>
+            <p className="card-instructions">Log physical activity to track calories burned during your day.</p>
+            
+            {burnedCaloriesFeedback !== null && (
+              <div className="exercise-success-alert data-mono animate-fade-in">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                <span>Logged "{loggedExerciseName}"! Burned ~{burnedCaloriesFeedback} kcal.</span>
+              </div>
+            )}
+
+            <form onSubmit={handleExerciseSubmit} className="exercise-log-form">
+              <div className="form-group">
+                <label className="form-label data-mono">EXERCISE TYPE</label>
+                <div className="preset-badges">
+                  {["Running", "Walking", "Cycling", "Weightlifting", "Swimming"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`preset-btn data-mono ${exerciseType === preset ? "active" : ""}`}
+                      onClick={() => setExerciseType(preset)}
+                    >
+                      {preset.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Or enter custom exercise..."
+                  value={exerciseType}
+                  onChange={(e) => setExerciseType(e.target.value)}
+                  required
+                  className="exercise-input"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group half-width">
+                  <label className="form-label data-mono">DURATION (MIN)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 45"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value === "" ? "" : Number(e.target.value))}
+                    min="1"
+                    max="720"
+                    required
+                    className="exercise-input"
+                  />
+                </div>
+
+                <div className="form-group half-width">
+                  <label className="form-label data-mono">INTENSITY</label>
+                  <select
+                    value={intensity}
+                    onChange={(e) => setIntensity(e.target.value)}
+                    className="exercise-select"
+                  >
+                    <option value="low">Low (Light effort)</option>
+                    <option value="moderate">Moderate (Steady effort)</option>
+                    <option value="high">High (Vigorous effort)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isLoggingExercise} className="btn-primary log-exercise-btn">
+                {isLoggingExercise ? "LOGGING EXERCISE..." : "LOG YOUR EXERCISE"}
               </button>
             </form>
           </section>
@@ -574,6 +684,114 @@ export default function FoodLogPage() {
         .sk-line1 { height: 16px; width: 60%; }
         .sk-line2 { height: 12px; width: 35%; }
         .sk-badge { height: 24px; width: 120px; }
+
+        /* Exercise Logger Styles */
+        .exercise-log-card {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .exercise-success-alert {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background-color: rgba(200, 240, 90, 0.04);
+          border: 1px solid rgba(200, 240, 90, 0.15);
+          border-radius: 8px;
+          padding: 12px 16px;
+          margin-bottom: 20px;
+          font-size: 0.85rem;
+          color: var(--primary);
+        }
+
+        .exercise-log-form {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .form-row {
+          display: flex;
+          gap: 16px;
+        }
+
+        .half-width {
+          flex: 1;
+        }
+
+        .form-label {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          letter-spacing: 0.05em;
+        }
+
+        .preset-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .preset-btn {
+          background-color: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 6px 12px;
+          font-size: 0.65rem;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 150ms ease;
+        }
+
+        .preset-btn:hover {
+          color: var(--text-primary);
+          border-color: var(--text-muted);
+          background-color: rgba(255, 255, 255, 0.04);
+        }
+
+        .preset-btn.active {
+          color: var(--primary);
+          border-color: var(--primary);
+          background-color: rgba(200, 240, 90, 0.08);
+        }
+
+        .exercise-input, .exercise-select {
+          background-color: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 12px 16px;
+          color: var(--text-primary);
+          font-size: 0.9rem;
+          font-family: var(--font-body);
+          transition: border-color 150ms ease, background-color 150ms ease;
+          width: 100%;
+        }
+
+        .exercise-input:focus, .exercise-select:focus {
+          border-color: var(--primary);
+          background-color: rgba(255, 255, 255, 0.04);
+          outline: none;
+        }
+
+        .exercise-select {
+          cursor: pointer;
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 12px center;
+          padding-right: 36px;
+        }
+
+        .log-exercise-btn {
+          margin-top: 8px;
+          width: 100%;
+        }
 
         @media (max-width: 900px) {
           .food-log-grid {
