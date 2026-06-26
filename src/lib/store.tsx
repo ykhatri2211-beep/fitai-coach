@@ -362,38 +362,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const toggleExerciseSet = (exerciseId: string, setIndex: number) => {
     if (!workoutPlan) return;
     
-    const updatedExercises = workoutPlan.exercises.map((ex) => {
-      if (ex.id === exerciseId) {
-        const updatedSets = ex.sets.map((set, idx) => {
-          if (idx === setIndex) {
-            return { ...set, completed: !set.completed };
-          }
-          return set;
-        });
-        return { ...ex, sets: updatedSets };
-      }
-      return ex;
+    const updatedDays = workoutPlan.days.map((day) => {
+      const updatedExercises = day.exercises.map((ex) => {
+        if (ex.id === exerciseId) {
+          const updatedSets = ex.sets.map((set, idx) => {
+            if (idx === setIndex) {
+              return { ...set, completed: !set.completed };
+            }
+            return set;
+          });
+          return { ...ex, sets: updatedSets };
+        }
+        return ex;
+      });
+      return { ...day, exercises: updatedExercises };
     });
 
-    const newPlan = { ...workoutPlan, exercises: updatedExercises };
+    const newPlan = { ...workoutPlan, days: updatedDays };
     setWorkoutPlan(newPlan);
 
     // Update dashboard completed sets ratio
     if (dashboardData && dashboardData.workout) {
-      const completedSets = updatedExercises.reduce(
-        (acc, curr) => acc + curr.sets.filter((s) => s.completed).length,
-        0
-      );
-      const totalSets = updatedExercises.reduce((acc, curr) => acc + curr.sets.length, 0);
-      setDashboardData({
-        ...dashboardData,
-        workout: {
-          ...dashboardData.workout,
-          setsCompleted: completedSets,
-          totalSets: totalSets,
-          completed: completedSets === totalSets,
-        },
-      });
+      const activeDay = updatedDays.find(d => d.name === dashboardData.workout?.name) || updatedDays[0];
+      if (activeDay) {
+        const completedSets = activeDay.exercises.reduce(
+          (acc, curr) => acc + curr.sets.filter((s) => s.completed).length,
+          0
+        );
+        const totalSets = activeDay.exercises.reduce((acc, curr) => acc + curr.sets.length, 0);
+        setDashboardData({
+          ...dashboardData,
+          workout: {
+            ...dashboardData.workout,
+            setsCompleted: completedSets,
+            totalSets: totalSets,
+            completed: completedSets === totalSets,
+          },
+        });
+      }
     }
   };
 

@@ -112,10 +112,15 @@ export interface Exercise {
   restSeconds: number;
 }
 
+export interface WorkoutDay {
+  dayNumber: number;
+  name: string;
+  exercises: Exercise[];
+}
+
 export interface WorkoutPlan {
   splitName: string;
-  dayName: string;
-  exercises: Exercise[];
+  days: WorkoutDay[];
 }
 
 export interface FoodLogEntry {
@@ -614,8 +619,72 @@ export const api = {
 
     const mockData: WorkoutPlan = {
       splitName,
-      dayName,
-      exercises,
+      days: [
+        {
+          dayNumber: 1,
+          name: isFatLoss ? "Push Day Focus A" : "Hypertrophy Push A",
+          exercises: exercises,
+        },
+        {
+          dayNumber: 2,
+          name: isFatLoss ? "Pull Day Focus A" : "Hypertrophy Pull A",
+          exercises: [
+            {
+              id: "mock_2_1",
+              name: "Lat Pulldown",
+              sets: [
+                { reps: 10, weightKg: 55, completed: false },
+                { reps: 10, weightKg: 55, completed: false },
+                { reps: 8, weightKg: 60, completed: false },
+              ],
+              restSeconds: 90,
+            },
+            {
+              id: "mock_2_2",
+              name: "Bent-Over Barbell Row",
+              sets: [
+                { reps: 8, weightKg: 50, completed: false },
+                { reps: 8, weightKg: 50, completed: false },
+              ],
+              restSeconds: 90,
+            },
+            {
+              id: "mock_2_3",
+              name: "Dumbbell Incline Curl",
+              sets: [
+                { reps: 12, weightKg: 10, completed: false },
+                { reps: 10, weightKg: 12, completed: false },
+              ],
+              restSeconds: 60,
+            }
+          ]
+        },
+        {
+          dayNumber: 3,
+          name: "Legs & Abs Focus",
+          exercises: [
+            {
+              id: "mock_3_1",
+              name: "Barbell Squat",
+              sets: [
+                { reps: 8, weightKg: 80, completed: false },
+                { reps: 8, weightKg: 80, completed: false },
+                { reps: 6, weightKg: 90, completed: false },
+              ],
+              restSeconds: 120,
+            },
+            {
+              id: "mock_3_2",
+              name: "Romanian Deadlift",
+              sets: [
+                { reps: 10, weightKg: 70, completed: false },
+                { reps: 10, weightKg: 70, completed: false },
+              ],
+              restSeconds: 90,
+            }
+          ]
+        }
+      ]
     };
 
     const res = await request<BackendWorkoutPlanResponse | WorkoutPlan>(
@@ -633,34 +702,39 @@ export const api = {
     }
 
     const b = res.data as BackendWorkoutPlanResponse;
-    const currentDay = b.days[0] || { name: "Rest", exercises: [] };
-    const mappedExercises = currentDay.exercises.map((ex, idx) => {
-      let repsNum = 10;
-      if (ex.reps) {
-        const parts = ex.reps.split("-");
-        if (parts.length === 2) {
-          repsNum = Math.round((parseInt(parts[0]) + parseInt(parts[1])) / 2);
-        } else {
-          const parsed = parseInt(ex.reps);
-          if (!isNaN(parsed)) repsNum = parsed;
+    const mappedDays = b.days.map((d) => {
+      const mappedExercises = d.exercises.map((ex, idx) => {
+        let repsNum = 10;
+        if (ex.reps) {
+          const parts = ex.reps.split("-");
+          if (parts.length === 2) {
+            repsNum = Math.round((parseInt(parts[0]) + parseInt(parts[1])) / 2);
+          } else {
+            const parsed = parseInt(ex.reps);
+            if (!isNaN(parsed)) repsNum = parsed;
+          }
         }
-      }
+        return {
+          id: `ex_${d.day}_${idx}`,
+          name: ex.name,
+          sets: Array.from({ length: ex.sets }).map(() => ({ 
+            reps: repsNum, 
+            weightKg: ex.target_weight_kg || 50, 
+            completed: false 
+          })),
+          restSeconds: 90,
+        };
+      });
       return {
-        id: `ex_${idx}`,
-        name: ex.name,
-        sets: Array.from({ length: ex.sets }).map(() => ({ 
-          reps: repsNum, 
-          weightKg: ex.target_weight_kg || 50, 
-          completed: false 
-        })),
-        restSeconds: 90,
+        dayNumber: d.day,
+        name: d.name,
+        exercises: mappedExercises,
       };
     });
 
     const mappedData: WorkoutPlan = {
       splitName: b.split.replace("_", " ").toUpperCase(),
-      dayName: currentDay.name,
-      exercises: mappedExercises,
+      days: mappedDays,
     };
 
     return { data: mappedData, isMock: false };

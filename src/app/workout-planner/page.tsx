@@ -6,23 +6,14 @@ import { Exercise } from "@/lib/api";
 
 export default function WorkoutPlannerPage() {
   const { workoutPlan, toggleExerciseSet, activeWorkout, startWorkout } = useStore();
-  const [selectedDay, setSelectedDay] = useState("TODAY");
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   
   // Rest Timer State
   const [timerRunning, setTimerRunning] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalRestTime, setTotalRestTime] = useState(90);
 
-  // Split selector definitions
-  const weeklySplit = [
-    { day: "MON", split: "PUSH DAY", active: true },
-    { day: "TUE", split: "PULL DAY", active: false },
-    { day: "WED", split: "REST DAY", active: false },
-    { day: "THU", split: "LEGS DAY", active: false },
-    { day: "FRI", split: "SHOULDERS/ARMS", active: false },
-    { day: "SAT", split: "REST DAY", active: false },
-    { day: "SUN", split: "REST DAY", active: false },
-  ];
+  const activeDay = workoutPlan?.days[selectedDayIndex] || workoutPlan?.days[0];
 
   // Timer logic
   useEffect(() => {
@@ -47,7 +38,7 @@ export default function WorkoutPlannerPage() {
     toggleExerciseSet(exerciseId, setIndex);
     // If completing the set, trigger the rest countdown
     if (!currentCompleted) {
-      const exercise = workoutPlan?.exercises.find((e) => e.id === exerciseId);
+      const exercise = activeDay?.exercises.find((e) => e.id === exerciseId);
       if (exercise) {
         triggerRestTimer(exercise.restSeconds);
       }
@@ -114,17 +105,17 @@ export default function WorkoutPlannerPage() {
 
           {/* Weekly split navigation */}
           <section className="card split-card">
-            <h2 className="section-title">WEEKLY SCHEDULE</h2>
+            <h2 className="section-title font-sans">WORKOUT SPLIT SCHEDULE</h2>
             <div className="split-days-container">
-              {weeklySplit.map((item) => (
+              {workoutPlan.days.map((day, idx) => (
                 <button
-                  key={item.day}
-                  onClick={() => setSelectedDay(item.day)}
-                  className={`split-day-btn ${selectedDay === item.day || (selectedDay === "TODAY" && item.active) ? "selected" : ""}`}
+                  key={day.dayNumber}
+                  onClick={() => setSelectedDayIndex(idx)}
+                  className={`split-day-btn ${selectedDayIndex === idx ? "selected" : ""}`}
                 >
-                  <span className="split-day-name data-mono">{item.day}</span>
-                  <span className="split-focus-text">{item.split}</span>
-                  {item.active && <span className="today-badge">TODAY</span>}
+                  <span className="split-day-name data-mono">DAY {day.dayNumber}</span>
+                  <span className="split-focus-text">{day.name}</span>
+                  {idx === 0 && <span className="today-badge">TODAY</span>}
                 </button>
               ))}
             </div>
@@ -134,16 +125,18 @@ export default function WorkoutPlannerPage() {
           <section className="card exercises-card">
             <div className="card-header-flex">
               <div>
-                <h2 className="section-title">TODAY'S TARGETS</h2>
-                <h3 className="target-title">{workoutPlan.splitName} — {workoutPlan.dayName}</h3>
+                <h2 className="section-title">SELECTED WORKOUT TARGETS</h2>
+                <h3 className="target-title">{workoutPlan.splitName} — {activeDay?.name || "Rest Day"}</h3>
               </div>
-              <button onClick={startWorkout} className="btn-primary start-session-btn">
-                START WORKOUT
-              </button>
+              {activeDay && activeDay.exercises.length > 0 && (
+                <button onClick={startWorkout} className="btn-primary start-session-btn">
+                  START WORKOUT
+                </button>
+              )}
             </div>
 
             <div className="exercises-list">
-              {workoutPlan.exercises.map((ex) => (
+              {activeDay?.exercises.map((ex) => (
                 <div key={ex.id} className="exercise-row">
                   <div className="exercise-info">
                     <h4 className="exercise-name">{ex.name}</h4>
@@ -160,6 +153,9 @@ export default function WorkoutPlannerPage() {
                   </div>
                 </div>
               ))}
+              {(!activeDay || activeDay.exercises.length === 0) && (
+                <p className="no-workout-text text-center py-8 text-muted">No exercises planned for this day.</p>
+              )}
             </div>
           </section>
         </div>
@@ -169,7 +165,7 @@ export default function WorkoutPlannerPage() {
           <header className="active-header">
             <div className="active-title-group">
               <span className="active-live-badge">LIVE SESSION</span>
-              <h1 className="page-title">{workoutPlan.dayName}</h1>
+              <h1 className="page-title">{activeDay?.name || "Workout"}</h1>
             </div>
             <div className="active-session-meta data-mono">
               TARGET REST: 60-120S BETWEEN SETS
@@ -179,7 +175,7 @@ export default function WorkoutPlannerPage() {
           <div className="divider" />
 
           <div className="active-exercises-grid">
-            {workoutPlan.exercises.map((ex) => (
+            {activeDay?.exercises.map((ex) => (
               <div key={ex.id} className="card active-exercise-card">
                 <div className="active-ex-header">
                   <h3 className="exercise-name">{ex.name}</h3>
@@ -254,8 +250,8 @@ export default function WorkoutPlannerPage() {
         }
 
         .split-days-container {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
+          display: flex;
+          flex-wrap: wrap;
           gap: 12px;
           margin-top: 12px;
         }
@@ -264,16 +260,18 @@ export default function WorkoutPlannerPage() {
           background-color: rgba(255, 255, 255, 0.02);
           border: 1px solid var(--border);
           border-radius: 12px;
-          padding: 16px 8px;
+          padding: 16px 12px;
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           gap: 8px;
           cursor: pointer;
           transition: border-color 150ms ease, background-color 150ms ease;
-          min-height: 110px;
+          min-height: 100px;
           text-align: center;
           position: relative;
+          flex: 1 1 140px;
         }
 
         .split-day-btn:hover {
@@ -597,13 +595,10 @@ export default function WorkoutPlannerPage() {
         }
 
         @media (max-width: 768px) {
-          .split-days-container {
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-          }
           .split-day-btn {
-            min-height: 90px;
-            padding: 12px 6px;
+            min-height: 80px;
+            padding: 8px;
+            flex: 1 1 100px;
           }
           .card-header-flex {
             flex-direction: column;
