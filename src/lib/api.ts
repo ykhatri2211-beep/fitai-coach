@@ -3,7 +3,17 @@
  * Target backend: http://127.0.0.1:8000
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+let API_BASE = "";
+if (typeof window !== "undefined") {
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+  const base = process.env.NEXT_PUBLIC_API_URL || `${protocol}//${host}:8000`;
+  API_BASE = base.replace(/\/$/, "") + "/api/v1";
+} else {
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  API_BASE = base.replace(/\/$/, "") + "/api/v1";
+}
+
 
 // Helper to get auth header
 function getAuthHeader(token: string | null): Record<string, string> {
@@ -19,10 +29,11 @@ async function request<T>(
   token: string | null = null,
   fallbackData: T
 ): Promise<{ data: T; isMock: boolean }> {
-  if (isOfflineMode) {
+  if (isOfflineMode || token === "simulated_jwt_token") {
     return { data: fallbackData, isMock: true };
   }
 
+  let response: Response;
   try {
     const url = `${API_BASE}${endpoint}`;
     const headers: Record<string, string> = {
@@ -31,23 +42,28 @@ async function request<T>(
       ...(options.headers as Record<string, string> || {}),
     };
 
-    const res = await fetch(url, {
+    response = await fetch(url, {
       ...options,
       headers,
     });
-
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-
-    const data = await res.json();
-    return { data: data as T, isMock: false };
-  } catch (error) {
-    console.warn(`[FitAI API] Connection to ${API_BASE}${endpoint} failed. Using Local Simulation Mode.`, error);
-    // Gracefully toggle to simulated offline mode for subsequent requests
-    // (can be reset on page reloads or status check)
+  } catch (networkError) {
+    console.warn(`[FitAI API] Connection to ${API_BASE}${endpoint} failed. Using Local Simulation Mode.`, networkError);
     return { data: fallbackData, isMock: true };
   }
+
+  if (!response.ok) {
+    let errorMsg = `HTTP error! status: ${response.status}`;
+    try {
+      const errorJson = await response.json();
+      if (errorJson && errorJson.detail) {
+        errorMsg = typeof errorJson.detail === "string" ? errorJson.detail : JSON.stringify(errorJson.detail);
+      }
+    } catch (_) {}
+    throw new Error(errorMsg);
+  }
+
+  const data = await response.json();
+  return { data: data as T, isMock: false };
 }
 
 // Types for responses
@@ -120,6 +136,7 @@ export interface BodyScanResult {
   muscleMassKg: number;
   weightKg: number;
   confidenceScore: number;
+  image?: string;
 }
 
 export interface WeeklyCheckinSummary {
@@ -131,37 +148,192 @@ export interface WeeklyCheckinSummary {
   predictedWeightKg: number;
 }
 
+interface BackendMacroTotals {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
+interface BackendConfidence {
+  recognition: number;
+  portion: number;
+  nutrition: number;
+}
+
+interface BackendDashboardResponse {
+  date: string;
+  targets: BackendMacroTotals;
+  consumed: BackendMacroTotals;
+  remaining: BackendMacroTotals;
+  confidence: BackendConfidence | null;
+  compliance_score: number;
+  common_foods: any[];
+}
+
+interface BackendFoodEntry {
+  id: string;
+  logged_on: string;
+  source: string;
+  meal_name: string;
+  items: any[];
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  recognition_confidence: number;
+  portion_confidence: number;
+  nutrition_confidence: number;
+  requires_confirmation: boolean;
+}
+
+interface BackendBodyScanResponse {
+  id: string;
+  body_fat_percent: number;
+  confidence_score: number;
+  lean_body_mass_kg: number;
+  fat_mass_kg: number;
+  physique_classification: string;
+  analysis: any;
+}
+
+interface BackendWeeklyCheckin {
+  recommendation: string;
+  changes: any[];
+  analysis: string[];
+  next_review_days: number;
+}
+
+interface BackendWorkoutDay {
+  day: number;
+  name: string;
+  exercises: { name: string; sets: number; reps: string }[];
+}
+
+interface BackendWorkoutPlanResponse {
+  split: string;
+  goal: string;
+  experience: string;
+  equipment: string[];
+  days: BackendWorkoutDay[];
+  progression: string;
+}
+
+interface BackendAuthResponse {
+  access_token: string;
+  token_type: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+}
+
 // API functions
 export const api = {
   // Auth
   async login(email: string): Promise<{ data: AuthResponse; isMock: boolean }> {
-    return request<AuthResponse>(
-      "/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify({ email, password: "password" }), // simple mock
-      },
-      null,
-      {
-        token: "simulated_jwt_token",
-        user: { email, onboarded: false },
-      }
-    );
-  },
+    const mockFallback: AuthResponse = {
+      token: "simulated_jwt_token",
+      user: { email, onboarded: false },
+    };
 
-  async register(email: string): Promise<{ data: AuthResponse; isMock: boolean }> {
-    return request<AuthResponse>(
-      "/auth/register",
+    const res = await request<BackendAuthResponse | AuthResponse>(
+      "/auth/login",
       {
         method: "POST",
         body: JSON.stringify({ email, password: "password" }),
       },
       null,
-      {
-        token: "simulated_jwt_token",
-        user: { email, onboarded: false },
-      }
+      mockFallback
     );
+
+    if (res.isMock) {
+      return { data: res.data as AuthResponse, isMock: true };
+    }
+
+    const b = res.data as BackendAuthResponse;
+
+    let onboarded = false;
+    try {
+      const meRes = await request<{ profile: any }>(
+        "/auth/me",
+        { method: "GET" },
+        b.access_token,
+        { profile: null }
+      );
+      if (!meRes.isMock && meRes.data.profile !== null) {
+        onboarded = true;
+      }
+    } catch (err) {
+      console.error("Error fetching /auth/me:", err);
+    }
+
+    const mapped: AuthResponse = {
+      token: b.access_token,
+      user: {
+        email: b.email,
+        onboarded: onboarded,
+      },
+    };
+    return { data: mapped, isMock: false };
+  },
+
+  async register(email: string): Promise<{ data: AuthResponse; isMock: boolean }> {
+    const defaultName = email.split("@")[0] || "User";
+    const mockFallback: AuthResponse = {
+      token: "simulated_jwt_token",
+      user: { email, onboarded: false },
+    };
+
+    const res = await request<BackendAuthResponse | AuthResponse>(
+      "/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password: "password", full_name: defaultName }),
+      },
+      null,
+      mockFallback
+    );
+
+    if (res.isMock) {
+      return { data: res.data as AuthResponse, isMock: true };
+    }
+
+    const b = res.data as BackendAuthResponse;
+    const mapped: AuthResponse = {
+      token: b.access_token,
+      user: {
+        email: b.email,
+        onboarded: false,
+      },
+    };
+    return { data: mapped, isMock: false };
+  },
+
+  async saveOnboarding(
+    token: string,
+    data: {
+      age: number;
+      gender: string;
+      height_cm: number;
+      current_weight_kg: number;
+      target_weight_kg: number;
+      activity_level: string;
+      training_experience: string;
+      dietary_preference: string;
+    }
+  ): Promise<{ success: boolean; isMock: boolean }> {
+    const res = await request<{ status: string }>(
+      "/auth/onboarding",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      token,
+      { status: "saved" }
+    );
+    return { success: res.data.status === "saved", isMock: res.isMock };
   },
 
   // Dashboard
@@ -173,30 +345,27 @@ export const api = {
   ): Promise<{ data: DashboardSummary; isMock: boolean }> {
     const isFatLoss = goal.toLowerCase().includes("lose") || goal.toLowerCase().includes("fat");
     
-    // Base maintenance calorie calculation: ~33 kcal per kg of bodyweight
     const maintenanceCalories = Math.round(weightKg * 33);
     
-    // Recalculate calorie goal based on goal and strictness pacing
     let calorieGoal = maintenanceCalories;
     if (isFatLoss) {
       if (dietStrictness === "Strict Diet") {
-        calorieGoal = maintenanceCalories - 600; // Aggressive cut
+        calorieGoal = maintenanceCalories - 600;
       } else if (dietStrictness === "Low Level Cut/Gain") {
-        calorieGoal = maintenanceCalories - 200; // Slow cut/recomposition
+        calorieGoal = maintenanceCalories - 200;
       } else {
-        calorieGoal = maintenanceCalories - 400; // Normal Cut
+        calorieGoal = maintenanceCalories - 400;
       }
-    } else { // muscle building / lean bulk / endurance
+    } else {
       if (dietStrictness === "Strict Diet") {
-        calorieGoal = maintenanceCalories + 150; // Clean bulk
+        calorieGoal = maintenanceCalories + 150;
       } else if (dietStrictness === "Low Level Cut/Gain") {
-        calorieGoal = maintenanceCalories + 50; // Micro surplus
+        calorieGoal = maintenanceCalories + 50;
       } else {
-        calorieGoal = maintenanceCalories + 300; // Normal surplus (Standard Bulk)
+        calorieGoal = maintenanceCalories + 300;
       }
     }
 
-    // Protein goal based on body weight in KG: ranging from 1.0x to 1.5x of bodyweight
     let proteinMultiplier = 1.2;
     if (isFatLoss) {
       if (dietStrictness === "Strict Diet") proteinMultiplier = 1.5;
@@ -209,11 +378,7 @@ export const api = {
     }
     
     const proteinGoal = Math.round(weightKg * proteinMultiplier);
-    
-    // Fat goal: healthy structural limit of ~0.8g per kg of body weight
     const fatsGoal = Math.round(weightKg * 0.8);
-    
-    // Carbs fills the remainder to reach the calorie target (1g carbs = 4 kcal)
     const carbsGoal = Math.round((calorieGoal - (proteinGoal * 4) - (fatsGoal * 9)) / 4);
 
     const mockData: DashboardSummary = {
@@ -243,7 +408,44 @@ export const api = {
         : `Your ${dietStrictness.toLowerCase()} protocol sets a surplus target of ${calorieGoal} kcal based on your ${weightKg}kg body weight. Fueling with ${carbsGoal}g carbs supports high workout intensity.`,
     };
 
-    return request<DashboardSummary>("/dashboard/summary", { method: "GET" }, token, mockData);
+    const res = await request<BackendDashboardResponse | DashboardSummary>(
+      "/dashboard/daily",
+      { method: "GET" },
+      token,
+      mockData
+    );
+
+    if (res.isMock) {
+      return { data: res.data as DashboardSummary, isMock: true };
+    }
+
+    const b = res.data as BackendDashboardResponse;
+    const mappedData: DashboardSummary = {
+      calories: {
+        consumed: b.consumed.calories,
+        goal: b.targets.calories,
+        burned: 0,
+      },
+      macros: {
+        protein: { current: b.consumed.protein_g, goal: b.targets.protein_g },
+        carbs: { current: b.consumed.carbs_g, goal: b.targets.carbs_g },
+        fats: { current: b.consumed.fat_g, goal: b.targets.fat_g },
+      },
+      workout: {
+        completed: false,
+        name: isFatLoss ? "High Intensity Pull" : "Hypertrophy Push A",
+        description: isFatLoss ? "Heavy compound lifts and high volume sets" : "Chest, shoulders, and triceps focus",
+        setsCompleted: 4,
+        totalSets: 16,
+      },
+      hydration: {
+        currentMl: 1500,
+        goalMl: 3000,
+      },
+      aiTip: `Adhering to your protocol. Your compliance score is ${b.compliance_score}%. Protein and caloric inputs are synced.`,
+    };
+
+    return { data: mappedData, isMock: false };
   },
 
   // Food Log
@@ -251,6 +453,11 @@ export const api = {
     token: string,
     payload: { text?: string; imageBase64?: string }
   ): Promise<{ data: FoodLogEntry; isMock: boolean }> {
+    const endpoint = payload.text ? "/food/text" : "/food/photo";
+    const body = payload.text 
+      ? { text: payload.text } 
+      : { image_url: payload.imageBase64, caption_hint: "" };
+
     const name = payload.text || "Logged Meal";
     const protein = payload.text ? Math.floor(Math.random() * 25) + 15 : 32;
     const carbs = payload.text ? Math.floor(Math.random() * 40) + 10 : 45;
@@ -270,15 +477,38 @@ export const api = {
       sourceType: payload.imageBase64 ? "photo" : "text",
     };
 
-    return request<FoodLogEntry>(
-      "/nutrition/log-food",
+    const res = await request<BackendFoodEntry | FoodLogEntry>(
+      endpoint,
       {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       },
       token,
       mockData
     );
+
+    if (res.isMock) {
+      return { data: res.data as FoodLogEntry, isMock: true };
+    }
+
+    const b = res.data as BackendFoodEntry;
+    const confidencePercent = Math.round(
+      ((b.recognition_confidence + b.portion_confidence + b.nutrition_confidence) / 3) * 100
+    );
+
+    const converted: FoodLogEntry = {
+      id: b.id,
+      timestamp: new Date(b.logged_on).toISOString(),
+      name: b.meal_name,
+      calories: b.calories,
+      protein: b.protein_g,
+      carbs: b.carbs_g,
+      fats: b.fat_g,
+      confidence: confidencePercent || 85,
+      sourceType: b.source === "photo" ? "photo" : "text",
+    };
+
+    return { data: converted, isMock: false };
   },
 
   // Workout Planner
@@ -289,7 +519,6 @@ export const api = {
   ): Promise<{ data: WorkoutPlan; isMock: boolean }> {
     const isFatLoss = goal.toLowerCase().includes("lose") || goal.toLowerCase().includes("fat");
 
-    // Dynamic splits name depending on days and goals
     let splitName = `${trainingDays}-Day Split`;
     let dayName = "Push Day Focus";
     let exercises = [
@@ -377,7 +606,7 @@ export const api = {
     } else if (trainingDays === 6) {
       splitName = isFatLoss ? "6-Day Push/Pull/Legs Deficit Split" : "6-Day Push/Pull/Legs Volume Split";
       dayName = "Push Day A";
-    } else { // 5 days
+    } else {
       splitName = isFatLoss ? "5-Day Upper/Lower/PPL Hybrid" : "5-Day Push/Pull/Legs Hypertrophy";
       dayName = "Push Day Focus";
     }
@@ -388,7 +617,36 @@ export const api = {
       exercises,
     };
 
-    return request<WorkoutPlan>("/workout/plan", { method: "GET" }, token, mockData);
+    const res = await request<BackendWorkoutPlanResponse | WorkoutPlan>(
+      "/planner/workout-plan",
+      {
+        method: "POST",
+        body: JSON.stringify({ training_days_per_week: trainingDays, available_equipment: [] })
+      },
+      token,
+      mockData
+    );
+
+    if (res.isMock) {
+      return { data: res.data as WorkoutPlan, isMock: true };
+    }
+
+    const b = res.data as BackendWorkoutPlanResponse;
+    const currentDay = b.days[0] || { name: "Rest", exercises: [] };
+    const mappedExercises = currentDay.exercises.map((ex, idx) => ({
+      id: `ex_${idx}`,
+      name: ex.name,
+      sets: Array.from({ length: ex.sets }).map(() => ({ reps: 10, weightKg: 50, completed: false })),
+      restSeconds: 90,
+    }));
+
+    const mappedData: WorkoutPlan = {
+      splitName: b.split.replace("_", " ").toUpperCase(),
+      dayName: currentDay.name,
+      exercises: mappedExercises,
+    };
+
+    return { data: mappedData, isMock: false };
   },
 
   // Body Scan
@@ -404,15 +662,37 @@ export const api = {
       confidenceScore: 92.5,
     };
 
-    return request<BodyScanResult>(
-      "/body-scan/upload",
+    const body = {
+      front_photo_url: imageBase64,
+      side_photo_url: imageBase64,
+      back_photo_url: null,
+    };
+
+    const res = await request<BackendBodyScanResponse | BodyScanResult>(
+      "/body/scans",
       {
         method: "POST",
-        body: JSON.stringify({ image: imageBase64 }),
+        body: JSON.stringify(body),
       },
       token,
       mockData
     );
+
+    if (res.isMock) {
+      return { data: res.data as BodyScanResult, isMock: true };
+    }
+
+    const b = res.data as BackendBodyScanResponse;
+    const converted: BodyScanResult = {
+      timestamp: new Date().toISOString(),
+      bodyFatPercent: b.body_fat_percent,
+      muscleMassKg: b.lean_body_mass_kg,
+      weightKg: Math.round((b.lean_body_mass_kg + b.fat_mass_kg) * 10) / 10,
+      confidenceScore: Math.round(b.confidence_score * 100),
+      image: imageBase64,
+    };
+
+    return { data: converted, isMock: false };
   },
 
   // Weekly Checkin
@@ -442,11 +722,33 @@ export const api = {
       predictedWeightKg: isFatLoss ? 79.2 : 83.2,
     };
 
-    return request<WeeklyCheckinSummary>(
-      "/coaching/weekly-checkin",
+    const res = await request<BackendWeeklyCheckin | WeeklyCheckinSummary>(
+      "/coach/weekly-check-in",
       { method: "GET" },
       token,
       mockData
     );
+
+    if (res.isMock) {
+      return { data: res.data as WeeklyCheckinSummary, isMock: true };
+    }
+
+    const b = res.data as BackendWeeklyCheckin;
+    const converted: WeeklyCheckinSummary = {
+      score: 85,
+      coachSummary: b.analysis.join(" "),
+      scoreHistory: [
+        { week: "Week 1", score: 72 },
+        { week: "Week 2", score: 78 },
+        { week: "Week 3", score: 81 },
+        { week: "Week 4", score: 80 },
+        { week: "Week 5", score: 85 },
+      ],
+      predictionText: `Your recommended path is: ${b.recommendation.replace("_", " ")}.`,
+      predictedBodyFat: isFatLoss ? 13.8 : 14.8,
+      predictedWeightKg: isFatLoss ? 79.5 : 82.5,
+    };
+
+    return { data: converted, isMock: false };
   },
 };

@@ -199,7 +199,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("fitai_user");
   };
 
-  const completeOnboarding = (
+  const completeOnboarding = async (
     metrics: { age: number; weight: number; height: number },
     diet: string,
     goal: string,
@@ -207,6 +207,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     dietStrictness: string
   ) => {
     if (!user) return;
+
+    if (token) {
+      let backendGoal = "body_recomposition";
+      if (goal === "Build Muscle") backendGoal = "muscle_gain";
+      else if (goal === "Lose Fat") backendGoal = "fat_loss";
+      else if (goal === "Lean Bulk") backendGoal = "lean_muscle_gain";
+      else if (goal === "Endurance") backendGoal = "weight_maintenance";
+
+      let backendDiet = "balanced";
+      if (diet === "Balanced") backendDiet = "vegetarian";
+      else if (diet === "High Protein") backendDiet = "non_vegetarian";
+      else if (diet === "Vegan") backendDiet = "vegan";
+      else if (diet === "Keto") backendDiet = "eggitarian";
+
+      try {
+        await api.saveOnboarding(token, {
+          age: metrics.age,
+          gender: "male",
+          height_cm: metrics.height,
+          current_weight_kg: metrics.weight,
+          target_weight_kg: metrics.weight,
+          activity_level: "moderately_active",
+          training_experience: "intermediate",
+          dietary_preference: backendDiet,
+        });
+      } catch (err) {
+        console.error("API Onboarding save failed:", err);
+      }
+    }
+
     const updated = {
       ...user,
       onboarded: true,

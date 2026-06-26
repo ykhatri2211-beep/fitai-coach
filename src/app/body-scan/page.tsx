@@ -11,11 +11,21 @@ export default function BodyScanPage() {
 
   const simulateScan = async (file: File) => {
     setIsScanning(true);
-    // Simulate deep AI scan
-    setTimeout(async () => {
-      await uploadScan("simulated_scan_image");
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      try {
+        await uploadScan(base64);
+      } catch (err) {
+        console.error("Scan upload failed:", err);
+      } finally {
+        setIsScanning(false);
+      }
+    };
+    reader.onerror = () => {
       setIsScanning(false);
-    }, 1500);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -159,9 +169,10 @@ export default function BodyScanPage() {
                 style={{ width: `${sliderVal}%` }}
               >
                 <img 
-                  src="/body_after.png" 
+                  src={latestScan?.image || "/body_after.png"} 
                   alt="Current composition scan" 
                   className="slide-img" 
+                  style={{ objectFit: "cover" }}
                 />
                 <span className="slide-tag tag-after data-mono">CURRENT (WEEK 6)</span>
               </div>

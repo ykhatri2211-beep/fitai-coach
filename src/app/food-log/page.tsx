@@ -21,28 +21,40 @@ export default function FoodLogPage() {
   const simulatePhotoScan = async (file: File) => {
     setIsScanning(true);
     setScanProgress(10);
-    
-    // Simulate scanner progress bar
-    const interval = setInterval(() => {
-      setScanProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return 90;
-        }
-        return prev + 20;
-      });
-    }, 250);
 
-    // After 1.2 seconds, complete the scan
-    setTimeout(async () => {
-      clearInterval(interval);
-      setScanProgress(100);
-      
-      // Generate a mock base64/placeholder and log food
-      await logMealPhoto("simulated_image_data");
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+
+      let progress = 10;
+      const interval = setInterval(() => {
+        progress += 20;
+        if (progress >= 90) {
+          clearInterval(interval);
+          setScanProgress(90);
+        } else {
+          setScanProgress(progress);
+        }
+      }, 200);
+
+      setTimeout(async () => {
+        clearInterval(interval);
+        setScanProgress(100);
+        try {
+          await logMealPhoto(base64);
+        } catch (err) {
+          console.error("Food photo log failed:", err);
+        } finally {
+          setIsScanning(false);
+          setScanProgress(0);
+        }
+      }, 1000);
+    };
+    reader.onerror = () => {
       setIsScanning(false);
       setScanProgress(0);
-    }, 1200);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDrag = (e: React.DragEvent) => {
