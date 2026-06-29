@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showWakeUpMessage, setShowWakeUpMessage] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,6 +17,12 @@ export default function LoginPage() {
     
     setError("");
     setIsSubmitting(true);
+    setShowWakeUpMessage(false);
+
+    // Show wake up message if response takes longer than 3.5 seconds (Render cold start)
+    const timer = setTimeout(() => {
+      setShowWakeUpMessage(true);
+    }, 3500);
 
     try {
       let success = false;
@@ -32,7 +39,9 @@ export default function LoginPage() {
       setError("An unexpected error occurred.");
       console.error(err);
     } finally {
+      clearTimeout(timer);
       setIsSubmitting(false);
+      setShowWakeUpMessage(false);
     }
   };
 
@@ -68,6 +77,15 @@ export default function LoginPage() {
           <button type="submit" className="btn-primary login-btn" disabled={isSubmitting}>
             {isSubmitting ? "PROCESSING..." : isRegister ? "REGISTER" : "ENTER"}
           </button>
+
+          {showWakeUpMessage && (
+            <div className="wake-up-message data-mono">
+              <svg className="spin-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8" />
+              </svg>
+              <span>Waking up free-tier server. Please wait ~30s...</span>
+            </div>
+          )}
         </form>
 
         <div className="toggle-mode">
@@ -195,6 +213,34 @@ export default function LoginPage() {
 
         .login-btn {
           width: 100%;
+        }
+
+        .wake-up-message {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          color: var(--secondary);
+          font-size: 0.75rem;
+          background-color: rgba(90, 138, 240, 0.05);
+          border: 1px solid rgba(90, 138, 240, 0.15);
+          padding: 10px 14px;
+          border-radius: 8px;
+          margin-top: 4px;
+          animation: fadeIn 200ms ease forwards;
+        }
+
+        .spin-icon {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         .toggle-mode {
